@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    kubernetes.io/change-cause: "Updated to 0.0.0-alpha.76 version of entity-tagging"
+  name: art-deployment
+  namespace: default
+  labels:
+    app: art
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: art
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 20%
+      maxUnavailable: 20% 
+  revisionHistoryLimit: 10
+  template:
+    metadata:
+      labels:
+        app: art
+    spec:
+      volumes:
+      - name: modelfiles
+        persistentVolumeClaim:
+            claimName: pvc-art-modelfiles-efs
+      containers:
+      - name: art
+        image: 421093829873.dkr.ecr.us-east-1.amazonaws.com/entity-tagging:0.0.0-alpha.76
+        env:
+          - name: MODEL_SERVER_WORKERS
+            value: "1"
+          - name: MODEL_SERVER_TIMEOUT
+            value: "600"
+        resources:
+          limits:
+            memory: "6000Mi"  
+            cpu: "3000m"      
+          requests:
+            memory: "4000Mi"  
+            cpu: "2000m"      
+        command:
+        - serve
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: modelfiles
+          mountPath: /opt/ml
+

@@ -1,0 +1,23 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  labels:
+    app: logs
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  name: logs-ingress
+  namespace: mgmt
+spec:
+  tls: 
+  - hosts:
+    - logs.goevex.com
+    secretName: logs-cert  
+  rules:
+    - host: logs.goevex.com
+      http:
+        paths:
+          - backend:
+              serviceName: elastic-stack-kibana
+              servicePort: 443
+            path: /

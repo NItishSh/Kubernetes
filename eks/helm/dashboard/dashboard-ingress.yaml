@@ -1,0 +1,21 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  name: dashboard-ingress
+  namespace: kubernetes-dashboard
+spec:
+  tls: 
+  - hosts:
+    - dashboard.goevex.com
+    secretName: dashboard-cert 
+  rules:
+    - host: dashboard.goevex.com
+      http:
+        paths:
+          - backend:
+              serviceName: kubernetes-dashboard
+              servicePort: 443
+            path: /

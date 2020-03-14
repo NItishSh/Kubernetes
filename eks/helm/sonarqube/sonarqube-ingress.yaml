@@ -1,0 +1,21 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  name: sonarqube-ingress
+  namespace: mgmt
+spec:
+  tls: 
+  - hosts:
+    - sonarqube.goevex.com
+    secretName: sonarqube-cert 
+  rules:
+    - host: sonarqube.goevex.com
+      http:
+        paths:
+          - backend:
+              serviceName: sonarqube-sonarqube
+              servicePort: 9000
+            path: /

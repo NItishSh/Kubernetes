@@ -1,0 +1,78 @@
+pipeline {
+  agent {
+    kubernetes {
+      //cloud 'kubernetes'
+            yaml """
+kind: Pod
+metadata:
+  name: kaniko
+spec:
+  containers:
+  - name: kaniko
+    image: gcr.io/kaniko-project/executor:debug-539ddefcae3fd6b411a95982a830d987f4214251
+    imagePullPolicy: Always
+    command:
+    - cat
+    tty: true
+    workingDir: "/home/jenkins/agent"
+    volumeMounts:
+    - mountPath: "/kaniko/.docker"
+      name: "docker-config"
+  - name: "jnlp"
+    image: "jenkins/jnlp-slave:3.35-5-alpine"
+    tty: true
+    workingDir: "/home/jenkins/agent"
+    volumeMounts:
+    - mountPath: "/home/jenkins/agent"
+      name: "workspace-volume"
+      readOnly: false
+  serviceAccount: jenkins
+  volumes:
+    - name: docker-config
+      configMap:
+        name: docker-config
+"""
+    }
+  }
+  environment {
+      IMAGE = 'gradle'
+      AWS_REGION = 'ap-south-1'
+      AWS_ACCOUNT = '371212343874'
+      GIT_REPO = 'git@bitbucket.org:teamevex/gradle.git'
+      GIT_CRED_ID = 'bitbucketcredentials'
+      MAJOR = '0'
+      MINOR = '0'
+      PATCH = '0'
+      RELEASE_TYPE = '-alpha' //alpha|beta|rc
+      VERSION = "${MAJOR}.${MINOR}.${PATCH}${RELEASE_TYPE}.${BUILD_NUMBER}"
+      VERSION_UAT="${MAJOR}.${MINOR}.${PATCH}-beta.${BUILD_NUMBER}"
+      VERSION_PROD="${MAJOR}.${MINOR}.${PATCH}"
+      TAGS = ''
+      GIT_USER_EMAIL='buildadmin@goevex.com'
+      GIT_USER_NAME='buildadmin_evex'
+  }
+  stages {
+    stage('build image') {
+      when {
+        expression {
+          // return env.BRANCH_NAME.startsWith("master") || env.BRANCH_NAME.startsWith("release") || env.BRANCH_NAME.startsWith('hotfix') || env.BRANCH_NAME.startsWith('development')
+          return env.BRANCH_NAME.startsWith("k8s")
+        }
+      }
+      steps {
+        container(name: 'kaniko') {
+          sh '''
+          if [ -z $GIT_COMMIT ]
+          then
+            GIT_COMMIT="manual"
+          fi
+          GIT_BRANCH=$(echo $GIT_BRANCH | cut -d '/' -f2)
+          /kaniko/executor --dockerfile `pwd`/Dockerfile --context `pwd` \
+          --destination=${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE}:$VERSION \
+          --destination=${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE}:latest 
+          '''
+        }
+      }
+    }
+  }
+}

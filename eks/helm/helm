@@ -1,0 +1,23 @@
+
+
+kubectl create ns mgmt
+
+
+#helm install elastic-stack stable/elastic-stack --namespace mgmt
+#helm install -f elastic-stack.values elastic-stack stable/elastic-stack --namespace mgmt
+#helm install efk akomljen-charts/efk --namespace mgmt
+
+#certmanager
+#crds
+kubectl apply --validate=false -f https://raw.githubusercontent.com/jetstack/cert-manager/release-0.12/deploy/manifests/00-crds.yaml
+helm repo add jetstack https://charts.jetstack.io
+#kubectl create namespace cert-manager
+#kubectl label namespace cert-manager certmanager.k8s.io/disable-validation="true"
+helm install cert-manager jetstack/cert-manager --namespace cert-manager 
+
+
+
+
+
+
+helm repo add stable https://kubernetes-charts.storage.googleapis.com

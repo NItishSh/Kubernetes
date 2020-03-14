@@ -1,0 +1,13 @@
+helm install metrics-server stable/metrics-server --namespace kube-system
+# NAME: metrics-server
+# LAST DEPLOYED: Sun Jan 19 11:35:25 2020
+# NAMESPACE: mgmt
+# STATUS: deployed
+# REVISION: 1
+# NOTES:
+# The metric server has been deployed. 
+
+# In a few minutes you should be able to list metrics using the following
+# command:
+
+#   kubectl get --raw "/apis/metrics.k8s.io/v1beta1/nodes"

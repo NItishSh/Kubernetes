@@ -1,0 +1,19 @@
+helm install -f /home/evex/workspace/eks/helm/elastic-stack/elastic-stack.yaml elastic-stack stable/elastic-stack --namespace kube-system
+# NAME: elastic-stack
+# LAST DEPLOYED: Sun Jan 19 11:52:16 2020
+# NAMESPACE: mgmt
+# STATUS: deployed
+# REVISION: 1
+# NOTES:
+# The elasticsearch cluster and associated extras have been installed.
+# Kibana can be accessed:
+
+#   * Within your cluster, at the following DNS name at port 9200:
+
+#     elastic-stack.mgmt.svc.cluster.local
+
+#   * From outside the cluster, run these commands in the same shell:
+
+#     export POD_NAME=$(kubectl get pods --namespace mgmt -l "app=elastic-stack,release=elastic-stack" -o jsonpath="{.items[0].metadata.name}")
+#     echo "Visit http://127.0.0.1:5601 to use Kibana"
+#     kubectl port-forward --namespace mgmt $POD_NAME 5601:5601

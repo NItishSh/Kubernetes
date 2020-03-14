@@ -1,0 +1,17 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: qa
+  region: ap-south-1
+
+nodeGroups:
+  - name: ng-1
+    minSize: 2
+    maxSize: 10
+    instancesDistribution:
+      #maxPrice: 0.017
+      instanceTypes: ["t3.medium","t3.large","t3.xlarge"] 
+      onDemandBaseCapacity: 0
+      onDemandPercentageAboveBaseCapacity: 50
+      spotInstancePools: 2

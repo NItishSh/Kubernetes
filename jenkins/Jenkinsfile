@@ -1,0 +1,267 @@
+pipeline {
+  agent {
+    kubernetes {
+      //cloud 'kubernetes'
+      yaml """
+kind: Pod
+metadata:
+  name: kaniko
+spec:
+  containers:
+  - name: kaniko
+    image: gcr.io/kaniko-project/executor:debug-539ddefcae3fd6b411a95982a830d987f4214251
+    imagePullPolicy: Always
+    command:
+    - cat
+    tty: true
+    workingDir: "/home/jenkins/agent"
+    volumeMounts:
+    - mountPath: "/kaniko/.docker"
+      name: "docker-config"
+  - name: "jnlp"
+    image: "jenkins/jnlp-slave:3.35-5-alpine"
+    tty: true
+    workingDir: "/home/jenkins/agent"
+    volumeMounts:
+    - mountPath: "/home/jenkins/agent"
+      name: "workspace-volume"
+      readOnly: false
+  - name: "python"
+    image: "421093829873.dkr.ecr.us-east-1.amazonaws.com/art-python:latest"
+    tty: true
+    workingDir: "/home/jenkins/agent"
+    volumeMounts:
+    - mountPath: "/home/jenkins/agent"
+      name: "workspace-volume"
+      readOnly: false
+  serviceAccount: jenkins
+  volumes:
+    - name: docker-config
+      configMap:
+        name: docker-config
+"""
+    }
+  }
+  environment {
+      IMAGE = 'entity-tagging'
+      AWS_REGION = 'us-east-1'
+      AWS_ACCOUNT = '421093829873'
+      GIT_REPO = 'git@github.com:SDFE/entity_tagging.git'
+      GIT_CRED_ID = 'githubcredentials'
+      MAJOR = '0'
+      MINOR = '0'
+      PATCH = '0'
+      RELEASE_TYPE = '-alpha' //alpha|beta|rc
+      VERSION = "${MAJOR}.${MINOR}.${PATCH}${RELEASE_TYPE}.${BUILD_NUMBER}"
+      VERSION_UAT="${MAJOR}.${MINOR}.${PATCH}-beta.${BUILD_NUMBER}"
+      VERSION_PROD="${MAJOR}.${MINOR}.${PATCH}"
+      TAGS = ''
+      GIT_USER_EMAIL='n.hanchinagoudra@elsevier.com'
+      GIT_USER_NAME='admin'
+  }
+  stages {
+    // stage('start'){
+    //   steps{
+    //     slackSend(channel: "Jenkins", color: '#FFFF00', message: "STARTED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+    //     emailext (
+    //         subject: "STARTED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'",
+    //         body: """<p>STARTED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]':</p>
+    //           <p>Check console output at &QUOT;<a href='${env.BUILD_URL}'>${env.JOB_NAME} [${env.BUILD_NUMBER}]</a>&QUOT;</p>""",
+    //         recipientProviders: [[$class: 'DevelopersRecipientProvider']]
+    //       )
+    //   }
+    // }
+    // stage('Checkout'){
+    //    steps{
+    //      git branch: 'development', credentialsId: "${GIT_CRED_ID}", url: "${GIT_REPO}" 
+    //    }
+    //  }
+    stage ('Lint'){
+      steps {
+        container(name: 'python') {
+          sh '''
+            env
+            pylint -rn ./**/*.py || true
+          '''
+        }        
+      }
+    }    
+    stage('Unit Tests') {
+      steps {
+        container(name: 'python') {
+          sh '''
+            cd src
+            ./unit.sh | true
+          '''
+        }
+      }
+    }    
+    stage('Sonar Check') {
+      steps {
+          echo 'Placeholder for Sonar Quality check...'
+      }
+    }
+    stage('Build & Push') {
+      steps {        
+        container(name: 'kaniko') {                    
+          sh '''          
+          if [ -z $GIT_COMMIT ]
+          then
+            GIT_COMMIT="manual"
+          fi
+          GIT_BRANCH=$(echo $GIT_BRANCH | cut -d '/' -f2)
+          /kaniko/executor --dockerfile `pwd`/Dockerfile --context `pwd` \
+          --destination=${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE}:latest \
+          --destination=${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE}:$BUILD_NUMBER \
+          --destination=${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE}:${GIT_COMMIT:0:7} \
+          --destination=${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE}:$GIT_BRANCH \
+          --destination=${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE}:$VERSION \
+          --build-arg tagger_type='ref' 
+          '''
+        }
+      }
+    }
+    // all the below steps should only run if the branch is release or hotfix branch
+    stage('Deploy') {
+      when {
+        expression {
+          return env.BRANCH_NAME.startsWith("release") || env.BRANCH_NAME.startsWith('hotfix') || env.BRANCH_NAME.startsWith('development')
+        }
+      }
+      input {
+          message "Deploy to Dev environment?"
+          ok "Yes."
+          submitter "admin"          
+      }
+      steps {
+        echo "Running Dev deployments......"
+        kubernetesDeploy(configs: "k8sfiles/deployment.yaml", kubeconfigId: "devkubeconfig")
+        kubernetesDeploy(configs: "k8sfiles/service.yaml", kubeconfigId: "devkubeconfig")
+        kubernetesDeploy(configs: "k8sfiles/ingress.yaml", kubeconfigId: "devkubeconfig")
+      }
+    }
+    stage('Integration Tests DEV') {
+      when {
+        expression {
+            return env.BRANCH_NAME.startsWith("release") || env.BRANCH_NAME.startsWith('hotfix') || env.BRANCH_NAME.startsWith('development')
+        }
+      }
+      steps {
+        container(name: 'python') {
+          echo 'Running Integration tests for DEV......'
+          sh '''
+            test/run_tests.sh dev ART_$(date +"%Y_%m_%d_%H_%M_%S") | true
+          '''
+        }
+      }
+      post{
+        success {
+          echo "Tagging Build To Version : "+env.VERSION+""
+          sh("git config --global user.email '"+env.GIT_USER_EMAIL+"'")
+          sh("git config --global user.name '"+env.GIT_USER_NAME+"'")
+          sh("git remote set-url origin "+env.GIT_REPO+"")          
+          sshagent(['githubcredentials']) {
+            sh("git tag -a "+env.VERSION+" -m 'Build Deployed to Dev'")
+            sh "git push --tags"
+          }
+        }             
+      }
+    }
+    stage('Deploy to UAT') {
+      when {
+        expression {
+          return env.BRANCH_NAME.startsWith("release") || env.BRANCH_NAME.startsWith('hotfix')
+        }
+      }
+      input {
+          message "Deploy to UAT environment?"
+          ok "Yes."
+          submitter "admin"          
+      }
+      steps {
+          echo 'Running UAT deployments......'
+      }
+    }
+    stage('Integration Tests UAT') {
+      when {
+        expression {
+            return env.BRANCH_NAME.startsWith("release") || env.BRANCH_NAME.startsWith('hotfix') || env.BRANCH_NAME.startsWith('development')
+        }
+      }
+      steps {
+        container(name: 'python') {
+          echo 'Running Integration tests for UAT......'
+          sh '''
+            test/run_tests.sh qa ART_$(date +"%Y_%m_%d_%H_%M_%S") | true
+          '''
+        }
+      }
+      post{
+        success {
+          echo "Tagging Build To Version : "+env.VERSION_UAT+""
+          sh("git config --global user.email '"+env.GIT_USER_EMAIL+"'")
+          sh("git config --global user.name '"+env.GIT_USER_NAME+"'")
+          sh("git remote set-url origin "+env.GIT_REPO+"")
+          sshagent(['githubcredentials']) {
+            sh("git tag -d "+env.VERSION+"")
+            sh("git push origin :refs/tags/"+env.VERSION+"")
+            sh("git tag -a "+env.VERSION_UAT+" -m 'Build Deployed to UAT'")
+            sh "git push --tags"
+          }
+        }             
+      }
+    }
+    stage('Deploy to Production') {
+      when {
+        expression {
+          return env.BRANCH_NAME.startsWith("release") || env.BRANCH_NAME.startsWith('hotfix')
+        }
+      }
+      input {
+          message "Deploy to Production environment?"
+          ok "Yes."
+          submitter "admin"          
+      }
+      steps {
+          echo 'Running Production deployments......'
+      }
+      post{
+        success {
+          echo "Tagging Build To Version : "+env.VERSION_PROD+""
+          sh("git config --global user.email '"+env.GIT_USER_EMAIL+"'")
+          sh("git config --global user.name '"+env.GIT_USER_NAME+"'")
+          sh("git remote set-url origin "+env.GIT_REPO+"")
+          sshagent(['githubcredentials']) {
+            sh("git tag -d "+env.VERSION_UAT+"")
+            sh("git push origin :refs/tags/"+env.VERSION_UAT+"")
+            sh("git tag -a "+env.VERSION_PROD+" -m 'Build Deployed to PROD'")
+            sh "git push --tags"
+          }
+        }             
+      }
+    }
+  }
+  // post {
+  //   success {
+  //     slackSend(channel: "Jenkins", color: '#00FF00', message: "SUCCESSFUL: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+
+  //     emailext (
+  //         subject: "SUCCESSFUL: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'",
+  //         body: """<p>SUCCESSFUL: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]':</p>
+  //           <p>Check console output at &QUOT;<a href='${env.BUILD_URL}'>${env.JOB_NAME} [${env.BUILD_NUMBER}]</a>&QUOT;</p>""",
+  //         recipientProviders: [[$class: 'DevelopersRecipientProvider']]
+  //       )
+  //   }
+
+  //   failure {
+  //     slackSend(channel: "Jenkins", color: '#FF0000', message: "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
+
+  //     emailext (
+  //         subject: "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'",
+  //         body: """<p>FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]':</p>
+  //           <p>Check console output at &QUOT;<a href='${env.BUILD_URL}'>${env.JOB_NAME} [${env.BUILD_NUMBER}]</a>&QUOT;</p>""",
+  //         recipientProviders: [[$class: 'DevelopersRecipientProvider']]
+  //       )
+  //   }
+  // }
+}

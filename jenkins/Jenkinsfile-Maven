@@ -1,0 +1,187 @@
+pipeline {
+  agent {
+    kubernetes {
+      //cloud 'kubernetes'
+      yaml """
+kind: Pod
+metadata:
+  name: kaniko
+spec:
+  containers:
+  - name: kaniko
+    image: gcr.io/kaniko-project/executor:debug-539ddefcae3fd6b411a95982a830d987f4214251
+    imagePullPolicy: Always
+    command:
+    - cat
+    tty: true
+    workingDir: "/home/jenkins/agent"
+    volumeMounts:
+    - mountPath: "/kaniko/.docker"
+      name: "docker-config"
+  - name: "jnlp"
+    image: "jenkins/jnlp-slave:3.35-5-alpine"
+    tty: true
+    workingDir: "/home/jenkins/agent"
+    volumeMounts:
+    - mountPath: "/home/jenkins/agent"
+      name: "workspace-volume"
+      readOnly: false
+  - name: "maven"
+    image: "maven:latest"
+    tty: true
+    workingDir: "/home/jenkins/agent"
+    volumeMounts:
+    - mountPath: "/home/jenkins/agent"
+      name: "workspace-volume"
+      readOnly: false
+  serviceAccount: jenkins
+  volumes:
+    - name: docker-config
+      configMap:
+        name: docker-config
+"""
+    }
+  }
+  environment {
+      IMAGE = 'entity-tagging'
+      AWS_REGION = 'us-east-1'
+      AWS_ACCOUNT = '421093829873'
+      GIT_REPO = 'git@github.com:SDFE/entity_tagging.git'
+      GIT_CRED_ID = 'githubcredentials'
+      MAJOR = '0'
+      MINOR = '0'
+      PATCH = '0'
+      RELEASE_TYPE = 'alpha' //alpha|beta|rc
+      VERSION = "${MAJOR}.${MINOR}.${PATCH}-${RELEASE_TYPE}.${BUILD_NUMBER}"
+      TAGS = ''
+      
+  }
+  stages {
+    stage('Checkout'){
+       steps{
+         git branch: 'development', credentialsId: "${GIT_CRED_ID}", url: "${GIT_REPO}" 
+         sh '''
+          ls
+          pwd
+         '''
+       }
+     }
+    stage ('Lint'){
+      steps {
+        container(name: 'python') {
+          sh '''
+            pylint -rn ./**/*.py || true
+          '''
+          // 
+        // container(name: 'pylint') {
+        //   sh '''
+        //   ### Need this because some strange control sequences when using default TERM=xterm
+        //   export TERM="linux"
+
+        //   ## || exit 0 because pylint only exits with 0 if everything is correct
+        //   pylint --rcfile=pylint.cfg $(find . -name "*.py" -print) MYMODULE/ > pylint.log 
+        //   '''
+        // }
+        }        
+      }
+    }    
+    stage('Unit Tests') {
+      steps {
+        container(name: 'python') {
+          echo 'Running unit tests...'
+        }
+      }
+    }    
+    stage('Sonar Check') {
+      steps {
+          echo 'Running Sonar Quality Check...'
+      }
+    }
+    stage('Build & Push') {
+      steps {        
+        container(name: 'kaniko') {                    
+          sh '''          
+          if [ -z $GIT_COMMIT ]
+          then
+            GIT_COMMIT="manual"
+          fi
+          GIT_BRANCH=$(echo $GIT_BRANCH | cut -d '/' -f2)
+          /kaniko/executor --dockerfile `pwd`/Dockerfile --context `pwd` \
+          --cache=true \
+          --cache-ttl=XXh \
+          --cache-dir='<localpath which is actually pvc mount>' \
+          --destination=${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE}:latest \
+          --destination=${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE}:$BUILD_NUMBER \
+          --destination=${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE}:${GIT_COMMIT:0:7} \
+          --destination=${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE}:$GIT_BRANCH \
+          --destination=${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE}:$VERSION \
+          --build-arg tagger_type='ref' \
+          --no-push           
+          '''
+        }
+      }
+    }
+    stage('tag') {
+      steps{
+          echo 'create git tag'
+      }
+    }
+    stage('notify') {
+      steps{
+          echo "slack and email notification with test results and sonar results"
+      }
+    }
+    // all the below steps should only run if the branch is release or hotfix branch
+    stage('Deploy') {
+      input {
+          message "Deploy to Development environment?"
+          ok "Yes."
+          submitter "admin"          
+      }
+      steps {
+        echo "deploy to dev"
+            // kubernetesDeploy(configs: "k8sfiles/pvc.yaml", kubeconfigId: "devkubeconfig")
+            // kubernetesDeploy(configs: "k8sfiles/deployment.yaml", kubeconfigId: "devkubeconfig")
+            // kubernetesDeploy(configs: "k8sfiles/service.yaml", kubeconfigId: "devkubeconfig")
+            // kubernetesDeploy(configs: "k8sfiles/ingress.yaml", kubeconfigId: "devkubeconfig")
+      }
+    }
+    stage('Integration Tests') {
+      steps {
+        container(name: 'python') {
+          echo 'Running Integration tests......'
+          sh '''
+            test/run_tests.sh local ART_2019_12_27_00_00_00_123
+          '''
+        }
+      }
+    }
+    stage('Performace Tests') {
+      steps {
+        container(name: 'python') {
+          echo 'Running System tests...'
+        }
+      }
+    }
+    stage('Deploy to UAT') {
+      input {
+          message "Deploy to UAT environment?"
+          ok "Yes."
+          submitter "admin"          
+      }
+      steps {
+          echo 'Running UAT deployments......'
+      }
+    }
+    stage('Deploy to Production') {
+      input {
+          message "Deploy to Production environment?"
+          ok "Yes."
+          submitter "admin"          
+      }
+      steps {
+          echo 'Running Production deployments......'
+      }
+    }
+  }
+}
