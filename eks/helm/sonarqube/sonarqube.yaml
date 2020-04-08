@@ -110,7 +110,7 @@ resources:
     memory: 1000Mi
   requests:
     cpu: 300m
-    memory: 500Mi
+    memory: 300Mi
 persistence:
   enabled: true
   ## Set annotations on pvc

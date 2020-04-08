@@ -1,4 +1,4 @@
-helm install -f /home/evex/workspace/eks/helm/grafana/values.yaml grafana stable/grafana --namespace kube-system
+helm upgrade --install --force -f /home/evex/workspace/eks/helm/grafana/values.yaml grafana stable/grafana --namespace kube-system
 # NAME: grafana
 # LAST DEPLOYED: Sun Jan 19 11:34:30 2020
 # NAMESPACE: mgmt

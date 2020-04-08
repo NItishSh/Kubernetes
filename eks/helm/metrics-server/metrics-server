@@ -1,4 +1,4 @@
-helm install metrics-server stable/metrics-server --namespace kube-system
+helm upgrade --install --force metrics-server stable/metrics-server --namespace kube-system
 # NAME: metrics-server
 # LAST DEPLOYED: Sun Jan 19 11:35:25 2020
 # NAMESPACE: mgmt

@@ -1,4 +1,4 @@
-helm install -f /home/evex/workspace/eks/helm/sonarqube/sonarqube.yaml sonarqube stable/sonarqube --namespace mgmt
+helm upgrade --install --force -f /home/evex/workspace/eks/helm/sonarqube/sonarqube.yaml sonarqube stable/sonarqube --namespace mgmt
 NAME: sonarqube
 LAST DEPLOYED: Mon Jan 20 11:57:16 2020
 NAMESPACE: mgmt

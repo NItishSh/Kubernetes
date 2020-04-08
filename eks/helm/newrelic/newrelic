@@ -1,1 +1,1 @@
-helm install stable/newrelic-infrastructure --version 0.13.17
+helm upgrade --install --force stable/newrelic-infrastructure --version 0.13.17

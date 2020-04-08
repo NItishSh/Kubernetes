@@ -1,1 +1,1 @@
-helm install weave-scope stable/weave-scope --namespace mgmt
+helm upgrade --install --force weave-scope stable/weave-scope --namespace mgmt

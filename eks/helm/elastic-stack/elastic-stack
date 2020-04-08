@@ -1,4 +1,4 @@
-helm install -f /home/evex/workspace/eks/helm/elastic-stack/elastic-stack.yaml elastic-stack stable/elastic-stack --namespace kube-system
+helm upgrade --install --force -f /home/evex/workspace/eks/helm/elastic-stack/elastic-stack.yaml elastic-stack stable/elastic-stack --namespace kube-system
 # NAME: elastic-stack
 # LAST DEPLOYED: Sun Jan 19 11:52:16 2020
 # NAMESPACE: mgmt

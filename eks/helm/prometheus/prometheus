@@ -1,4 +1,4 @@
-helm install prometheus stable/prometheus --namespace kube-system
+helm upgrade --install --force prometheus stable/prometheus --namespace kube-system
 # NAME: prometheus
 # LAST DEPLOYED: Sun Jan 19 11:33:32 2020
 # NAMESPACE: mgmt

@@ -1,4 +1,4 @@
-helm install efs-provisioner stable/efs-provisioner --set efsProvisioner.efsFileSystemId=fs-8b59850b --set efsProvisioner.awsRegion=us-east-1 --namespace kube-system
+helm upgrade --install --force efs-provisioner stable/efs-provisioner --set efsProvisioner.efsFileSystemId=fs-8b59850b --set efsProvisioner.awsRegion=us-east-1 --namespace kube-system
 # NAME: efs-provisioner
 # LAST DEPLOYED: Sun Jan 19 11:46:36 2020
 # NAMESPACE: mgmt

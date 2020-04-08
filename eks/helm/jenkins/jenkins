@@ -1,4 +1,4 @@
-helm install -f /home/evex/workspace/eks/helm/jenkins/jenkins.yaml jenkins stable/jenkins --namespace kube-system
+helm upgrade --install --force -f /home/evex/workspace/eks/helm/jenkins/jenkins.yaml jenkins stable/jenkins --namespace kube-system
 # NAME: jenkins
 # LAST DEPLOYED: Sun Jan 19 11:29:11 2020
 # NAMESPACE: mgmt

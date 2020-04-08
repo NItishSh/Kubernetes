@@ -213,21 +213,24 @@ master:
 
   # List of plugins to be install during Jenkins master start
   installPlugins:
-    - kubernetes:1.21.2
-    - workflow-job:2.36
+    - kubernetes:1.25.0
+    - workflow-job:2.37
     - workflow-aggregator:2.6
-    - credentials-binding:1.20
-    - git:4.0.0
-    - kubernetes-cd:2.2.0
-    - blueocean:1.21.0
-    - amazon-ecr:1.6
-    - docker-workflow:1.21
-    - pipeline-aws:1.39
-    - github-pullrequest:0.2.6
+    - credentials-binding:1.21
+    - git:4.2.2
+    - kubernetes-cd:2.3.0
+    - blueocean:1.22.0
+    - amazon-ecr:1.6  #not required
+    - docker-workflow:1.23  #not required
+    - pipeline-aws:1.40 #not required
+    - github-pullrequest:0.2.8
     - violations:0.7.11
     - sonar:2.11
     - gradle:1.36
     - ssh-agent:1.19
+    - atlassian-jira-software-cloud:1.0.4
+    - google-login:1.6
+    - prometheus:2.0.6
 
   # Enable to always override the installed plugins with the values of 'master.installPlugins' on upgrade or redeployment.
   # overwritePlugins: true
@@ -503,7 +506,7 @@ persistence:
   ##
   storageClass: aws-efs
   annotations: {}
-  accessMode: "ReadWriteOnce"
+  accessMode: "ReadWriteMany"
   size: "8Gi"
   volumes:
   #  - name: nothing

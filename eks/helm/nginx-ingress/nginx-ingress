@@ -1,4 +1,4 @@
-helm install nginx-ingress stable/nginx-ingress --namespace kube-system
+helm upgrade --install --force nginx-ingress stable/nginx-ingress --namespace kube-system
 # NAME: nginx-ingress
 # LAST DEPLOYED: Sun Jan 19 11:32:13 2020
 # NAMESPACE: mgmt
