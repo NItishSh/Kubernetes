@@ -1,5 +1,7 @@
 #!/bin/bash
 
+DIR=$(dirname "$0")
+
 AWS_REGION="ap-south-1"
 EKS_CLUSTER_NAME="dev"
 SSK_PUBLIC_KEY="/home/evex/.ssh/eks-key-pair.pub"
@@ -9,7 +11,20 @@ NODE_MAX="15"
 NODE_VOLUME_SIZE="20"
 NODE_SIZE="t3.large"
 
+
+#aws cli
+#https://docs.aws.amazon.com/cli/latest/userguide/install-linux.html
+curl -O https://bootstrap.pypa.io/get-pip.py
+python get-pip.py --user
+echo "export PATH=~/.local/bin:$PATH" >> ~/.bash_profile
+source ~/.bash_profile
+pip install awscli --upgrade --user
+
 #upgrade kubectl
+#https://docs.aws.amazon.com/eks/latest/userguide/install-kubectl.html
+curl -o kubectl https://amazon-eks.s3.us-west-2.amazonaws.com/1.15.10/2020-02-22/bin/darwin/amd64/kubectl
+chmod +x ./kubectl
+sudo mv ./kubectl /usr/local/bin/kubectl
 
 #upgrade eksctl
 curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
@@ -62,48 +77,53 @@ else
     --wait
 fi
 
-# bash /home/evex/workspace/eks/helm/cert-manager/cert-manager
-
+export KUBECONFIG=~/.kube/clusters/$EKS_CLUSTER_NAME.config
 aws eks --region $AWS_REGION update-kubeconfig --name $EKS_CLUSTER_NAME
-kubectl create ns mgmt
+kubectl create ns mgmt # start using kube-system
 kubectl config set-context --current --namespace=mgmt
+
+#ecr login for docker registry
+kubectl apply -f $DIR/../jenkins/docker-config.yaml
 
 helm repo add stable https://kubernetes-charts.storage.googleapis.com
 
+#efs-provisioner
+helm upgrade --install --force efs-provisioner stable/efs-provisioner \
+--set efsProvisioner.efsFileSystemId=fs-a7973076 --set efsProvisioner.awsRegion=$AWS_REGION
+
 #nginx-ingress controller
-helm upgrade --install --force nginx-ingress stable/nginx-ingress --namespace kube-system
+helm upgrade --install --force nginx-ingress stable/nginx-ingress \
+--set controller.publishService.enabled=true
 
 #metrics server
-helm upgrade --install --force metrics-server stable/metrics-server --namespace kube-system
+helm upgrade --install --force metrics-server stable/metrics-server
 
 #certmanager
 kubectl apply --validate=false -f https://raw.githubusercontent.com/jetstack/cert-manager/release-0.13/deploy/manifests/00-crds.yaml
 helm repo add jetstack https://charts.jetstack.io
 kubectl create namespace cert-manager
 helm upgrade --install --force cert-manager jetstack/cert-manager --namespace cert-manager 
+kubectl apply -f $DIR/helm/cert-manager/clusterissuer.yaml
 
 #elastic stack
-helm upgrade --install --force \
--f /home/evex/workspace/eks/helm/elastic-stack/elastic-stack.yaml \
-elastic-stack \
-stable/elastic-stack \
---namespace kube-system
+helm upgrade --install --force elastic-stack stable/elastic-stack \
+-f $DIR/helm/elastic-stack/elastic-stack.yaml 
 
 #weave-scope
-helm upgrade --install --force weave-scope stable/weave-scope --namespace mgmt
+helm upgrade --install --force weave-scope stable/weave-scope
 
 if [[ "$EKS_CLUSTER_NAME" == "dev" ]]
 then
     #jenkins
-    helm upgrade --install --force -f /home/evex/workspace/eks/helm/jenkins/jenkins.yaml jenkins stable/jenkins --namespace kube-system
+    helm upgrade --install --force -f $DIR/helm/jenkins/jenkins.yaml jenkins stable/jenkins
     
     #sonarqube
-    helm upgrade --install --force -f /home/evex/workspace/eks/helm/sonarqube/sonarqube.yaml sonarqube stable/sonarqube --namespace mgmt
+    helm upgrade --install --force -f $DIR/helm/sonarqube/sonarqube.yaml sonarqube stable/sonarqube
 fi
 
 #grafana
-helm upgrade --install --force -f /home/evex/workspace/eks/helm/grafana/values.yaml grafana stable/grafana --namespace kube-system
+helm upgrade --install --force -f $DIR/helm/grafana/values.yaml grafana stable/grafana
 
 #prometheus
-helm upgrade --install --force prometheus stable/prometheus --namespace kube-system
+helm upgrade --install --force prometheus stable/prometheus
 
